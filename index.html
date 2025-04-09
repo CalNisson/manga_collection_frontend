@@ -36,6 +36,9 @@
     .series-entry {
       margin-bottom: 1rem;
     }
+    .toggle-section {
+      margin-bottom: 1rem;
+    }
   </style>
 </head>
 <body>
@@ -50,6 +53,11 @@
     </form>
   </div>
 
+  <div class="toggle-section">
+    <button onclick="setFilter(false)">Incomplete</button>
+    <button onclick="setFilter(true)">Complete</button>
+  </div>
+
   <div id="series-list"></div>
   <div id="volume-list"></div>
   <div id="edit-total" style="display: none; margin-top: 1rem;"></div>
@@ -58,6 +66,7 @@
     const API_BASE = "https://manga-collection-backend-0fqi.onrender.com";
     let selectedSeriesId = null;
     let selectedSeriesTitle = "";
+    let filterCompleted = false;
 
     document.getElementById("add-series-form").addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -79,13 +88,27 @@
       }
     });
 
+    function setFilter(completed) {
+      filterCompleted = completed;
+      selectedSeriesId = null;
+      selectedSeriesTitle = "";
+      document.getElementById("volume-list").innerHTML = "";
+      document.getElementById("edit-total").style.display = "none";
+      document.getElementById("edit-total").innerHTML = "";
+      fetchSeries();
+    }
+
     async function fetchSeries() {
       const res = await fetch(`${API_BASE}/series`);
       const series = await res.json();
-      const container = document.getElementById("series-list");
-      container.innerHTML = "<h2>Series</h2>";
+      const filtered = series
+        .filter(s => s.completed === filterCompleted)
+        .sort((a, b) => a.title.localeCompare(b.title));
 
-      series.forEach((s) => {
+      const container = document.getElementById("series-list");
+      container.innerHTML = `<h2>${filterCompleted ? "Complete" : "Incomplete"} Series</h2>`;
+
+      filtered.forEach((s) => {
         const wrapper = document.createElement("div");
         wrapper.className = "series-entry";
         const btn = document.createElement("button");
@@ -93,10 +116,13 @@
         btn.onclick = () => toggleSeries(s.id, s.title);
 
         const label = document.createElement("small");
-        label.textContent = `Total Volumes: ${s.total_volumes ?? 'N/A'}`;
+        const percent = s.total_volumes
+          ? Math.round((s.volumes.filter(v => v.owned).length / s.total_volumes) * 100)
+          : 0;
+        label.textContent = `Total Volumes: ${s.total_volumes ?? 'N/A'} — Owned: ${percent}%`;
+
         wrapper.appendChild(btn);
         wrapper.appendChild(label);
-
         container.appendChild(wrapper);
       });
     }
@@ -163,8 +189,7 @@
         item.className = "volume" + (v.owned ? " owned" : "");
         item.textContent = `Vol. ${v.volume_number}`;
         item.onclick = async () => {
-          await fetch(`${API_BASE}/volumes/${v.id}/toggle`, {
-            method: "POST" });
+          await fetch(`${API_BASE}/volumes/${v.id}/toggle`, { method: "POST" });
           loadVolumes(seriesId, title);
         };
         list.appendChild(item);
@@ -196,7 +221,7 @@
       container.appendChild(addVolForm);
     }
 
-    fetchSeries();
+    setFilter(false); // default to showing incomplete series
   </script>
 </body>
 </html>
