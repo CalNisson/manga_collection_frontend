@@ -33,6 +33,9 @@
       margin-right: 0.5rem;
       padding: 0.5rem;
     }
+    .series-entry {
+      margin-bottom: 1rem;
+    }
   </style>
 </head>
 <body>
@@ -49,9 +52,12 @@
 
   <div id="series-list"></div>
   <div id="volume-list"></div>
+  <div id="edit-total" style="display: none; margin-top: 1rem;"></div>
 
   <script>
     const API_BASE = "https://manga-collection-backend-0fqi.onrender.com";
+    let selectedSeriesId = null;
+    let selectedSeriesTitle = "";
 
     document.getElementById("add-series-form").addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -60,10 +66,8 @@
 
       const res = await fetch(`${API_BASE}/series`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ title, total_volumes: total ? parseInt(total) : null }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, total_volumes: total ? parseInt(total) : null })
       });
 
       if (res.ok) {
@@ -78,20 +82,51 @@
     async function fetchSeries() {
       const res = await fetch(`${API_BASE}/series`);
       const series = await res.json();
-
       const container = document.getElementById("series-list");
       container.innerHTML = "<h2>Series</h2>";
 
       series.forEach((s) => {
         const wrapper = document.createElement("div");
-        wrapper.innerHTML = `
-          <button onclick="loadVolumes(${s.id}, '${s.title}')">${s.title}</button>
-          <small>Total Volumes: ${s.total_volumes ?? 'N/A'}</small>
-          <input type="number" id="update-total-${s.id}" placeholder="Update total" min="1" style="margin-left: 0.5rem;" />
-          <button onclick="updateTotalVolumes(${s.id})">Update</button>
-        `;
+        wrapper.className = "series-entry";
+        const btn = document.createElement("button");
+        btn.textContent = s.title;
+        btn.onclick = () => toggleSeries(s.id, s.title);
+
+        const label = document.createElement("small");
+        label.textContent = `Total Volumes: ${s.total_volumes ?? 'N/A'}`;
+        wrapper.appendChild(btn);
+        wrapper.appendChild(label);
+
         container.appendChild(wrapper);
       });
+    }
+
+    async function toggleSeries(seriesId, title) {
+      const container = document.getElementById("volume-list");
+      const editContainer = document.getElementById("edit-total");
+      if (selectedSeriesId === seriesId) {
+        selectedSeriesId = null;
+        selectedSeriesTitle = "";
+        container.innerHTML = "";
+        editContainer.style.display = "none";
+        editContainer.innerHTML = "";
+        return;
+      }
+
+      selectedSeriesId = seriesId;
+      selectedSeriesTitle = title;
+      await loadVolumes(seriesId, title);
+      renderUpdateTotalField();
+    }
+
+    function renderUpdateTotalField() {
+      const editContainer = document.getElementById("edit-total");
+      editContainer.style.display = "block";
+      editContainer.innerHTML = `
+        <h3>Update Total Volumes for ${selectedSeriesTitle}</h3>
+        <input type="number" id="update-total-${selectedSeriesId}" placeholder="New total" min="1" />
+        <button onclick="updateTotalVolumes(${selectedSeriesId})">Update</button>
+      `;
     }
 
     async function updateTotalVolumes(seriesId) {
@@ -107,6 +142,7 @@
 
       if (res.ok) {
         fetchSeries();
+        loadVolumes(seriesId, selectedSeriesTitle);
       } else {
         alert("Failed to update total volumes");
       }
@@ -128,8 +164,7 @@
         item.textContent = `Vol. ${v.volume_number}`;
         item.onclick = async () => {
           await fetch(`${API_BASE}/volumes/${v.id}/toggle`, {
-            method: "POST",
-          });
+            method: "POST" });
           loadVolumes(seriesId, title);
         };
         list.appendChild(item);
