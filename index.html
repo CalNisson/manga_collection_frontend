@@ -83,11 +83,33 @@
       container.innerHTML = "<h2>Series</h2>";
 
       series.forEach((s) => {
-        const btn = document.createElement("button");
-        btn.textContent = s.title;
-        btn.onclick = () => loadVolumes(s.id, s.title);
-        container.appendChild(btn);
+        const wrapper = document.createElement("div");
+        wrapper.innerHTML = `
+          <button onclick="loadVolumes(${s.id}, '${s.title}')">${s.title}</button>
+          <small>Total Volumes: ${s.total_volumes ?? 'N/A'}</small>
+          <input type="number" id="update-total-${s.id}" placeholder="Update total" min="1" style="margin-left: 0.5rem;" />
+          <button onclick="updateTotalVolumes(${s.id})">Update</button>
+        `;
+        container.appendChild(wrapper);
       });
+    }
+
+    async function updateTotalVolumes(seriesId) {
+      const input = document.getElementById(`update-total-${seriesId}`);
+      const newTotal = parseInt(input.value);
+      if (!newTotal || newTotal < 1) return alert("Enter a valid volume count");
+
+      const res = await fetch(`${API_BASE}/series/${seriesId}/update_total`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ total_volumes: newTotal })
+      });
+
+      if (res.ok) {
+        fetchSeries();
+      } else {
+        alert("Failed to update total volumes");
+      }
     }
 
     async function loadVolumes(seriesId, title) {
@@ -115,7 +137,6 @@
 
       container.appendChild(list);
 
-      // Add form to manually add volumes and mark them as owned
       const addVolForm = document.createElement("form");
       addVolForm.innerHTML = `
         <h3>Add Volume</h3>
