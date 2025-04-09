@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Manga Volume Tracker</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 2rem;
+    }
+    h2 {
+      margin-top: 2rem;
+    }
+    .volume-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .volume {
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .owned {
+      background-color: #c8e6c9;
+    }
+  </style>
+</head>
+<body>
+  <h1>Manga Volume Tracker</h1>
+  <div id="series-list"></div>
+  <div id="volume-list"></div>
+
+  <script>
+    const API_BASE = "https://manga-collection-backend-0fqi.onrender.com"; // Replace with your actual Render domain
+
+    async function fetchSeries() {
+      const res = await fetch(`${API_BASE}/series`);
+      const series = await res.json();
+
+      const container = document.getElementById("series-list");
+      container.innerHTML = "<h2>Series</h2>";
+
+      series.forEach((s) => {
+        const btn = document.createElement("button");
+        btn.textContent = s.title;
+        btn.onclick = () => loadVolumes(s.id, s.title);
+        container.appendChild(btn);
+      });
+    }
+
+    async function loadVolumes(seriesId, title) {
+      const res = await fetch(`${API_BASE}/series/${seriesId}/volumes`);
+      const volumes = await res.json();
+
+      const container = document.getElementById("volume-list");
+      container.innerHTML = `<h2>${title} - Volumes</h2>`;
+
+      const list = document.createElement("div");
+      list.className = "volume-list";
+
+      volumes.forEach((v) => {
+        const item = document.createElement("div");
+        item.className = "volume" + (v.owned ? " owned" : "");
+        item.textContent = `Vol. ${v.volume_number}`;
+        item.onclick = async () => {
+          await fetch(`${API_BASE}/volumes/${v.id}/toggle`, {
+            method: "POST",
+          });
+          loadVolumes(seriesId, title);
+        };
+        list.appendChild(item);
+      });
+
+      container.appendChild(list);
+    }
+
+    fetchSeries();
+  </script>
+</body>
+</html>
