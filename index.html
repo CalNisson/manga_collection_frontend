@@ -29,7 +29,7 @@
     form {
       margin-top: 1rem;
     }
-    input, button {
+    input, button, select {
       margin-right: 0.5rem;
       padding: 0.5rem;
     }
@@ -37,6 +37,7 @@
       margin-bottom: 1rem;
     }
     .toggle-section {
+      margin-top: 2rem;
       margin-bottom: 1rem;
     }
     .progress {
@@ -49,6 +50,16 @@
     .progress-bar {
       height: 100%;
       background-color: #4caf50;
+    }
+    .series-actions {
+      display: none;
+      margin-top: 0.5rem;
+    }
+    .series-entry.active .series-actions {
+      display: block;
+    }
+    .details-container {
+      margin-top: 0.5rem;
     }
   </style>
 </head>
@@ -65,13 +76,19 @@
   </div>
 
   <div class="toggle-section">
+    <input type="text" id="search-input" placeholder="Search series..." oninput="fetchSeries()" />
     <button onclick="setFilter(false)">Incomplete</button>
     <button onclick="setFilter(true)">Complete</button>
+    <label for="sort-select">Sort by:</label>
+    <select id="sort-select" onchange="fetchSeries()">
+      <option value="alpha">Alphabetical</option>
+      <option value="total">Total Volumes</option>
+      <option value="owned">Volumes Owned</option>
+      <option value="percent">% Owned</option>
+    </select>
   </div>
 
   <div id="series-list"></div>
-  <div id="volume-list"></div>
-  <div id="edit-total" style="display: none; margin-top: 1rem;"></div>
 
   <script>
     const API_BASE = "https://manga-collection-backend-0fqi.onrender.com";
@@ -103,18 +120,29 @@
       filterCompleted = completed;
       selectedSeriesId = null;
       selectedSeriesTitle = "";
-      document.getElementById("volume-list").innerHTML = "";
-      document.getElementById("edit-total").style.display = "none";
-      document.getElementById("edit-total").innerHTML = "";
       fetchSeries();
     }
 
+    function sortSeries(list) {
+      const sortBy = document.getElementById("sort-select").value;
+      return list.sort((a, b) => {
+        const ownedA = a.volumes.filter(v => v.owned).length;
+        const ownedB = b.volumes.filter(v => v.owned).length;
+        const percentA = a.total_volumes ? ownedA / a.total_volumes : 0;
+        const percentB = b.total_volumes ? ownedB / b.total_volumes : 0;
+
+        if (sortBy === "total") return (b.total_volumes || 0) - (a.total_volumes || 0);
+        if (sortBy === "owned") return ownedB - ownedA;
+        if (sortBy === "percent") return percentB - percentA;
+        return a.title.localeCompare(b.title);
+      });
+    }
+
     async function fetchSeries() {
+      const searchTerm = document.getElementById("search-input").value.toLowerCase();
       const res = await fetch(`${API_BASE}/series`);
       const series = await res.json();
-      const filtered = series
-        .filter(s => s.completed === filterCompleted)
-        .sort((a, b) => a.title.localeCompare(b.title));
+      const filtered = sortSeries(series.filter(s => s.completed === filterCompleted && s.title.toLowerCase().includes(searchTerm)));
 
       const container = document.getElementById("series-list");
       container.innerHTML = `<h2>${filterCompleted ? "Complete" : "Incomplete"} Series</h2>`;
@@ -122,15 +150,15 @@
       filtered.forEach((s) => {
         const wrapper = document.createElement("div");
         wrapper.className = "series-entry";
+        wrapper.id = `series-${s.id}`;
+
         const btn = document.createElement("button");
         btn.textContent = s.title;
-        btn.onclick = () => toggleSeries(s.id, s.title);
+        btn.onclick = () => toggleSeries(wrapper, s);
 
         const label = document.createElement("small");
         const ownedCount = s.volumes.filter(v => v.owned).length;
-        const percent = s.total_volumes
-          ? Math.round((ownedCount / s.total_volumes) * 100)
-          : 0;
+        const percent = s.total_volumes ? Math.round((ownedCount / s.total_volumes) * 100) : 0;
         label.textContent = `Total Volumes: ${s.total_volumes ?? 'N/A'} — Owned: ${percent}%`;
 
         const progress = document.createElement("div");
@@ -140,47 +168,62 @@
         progressBar.style.width = `${percent}%`;
         progress.appendChild(progressBar);
 
+        const actions = document.createElement("div");
+        actions.className = "series-actions";
         const toggleCompleteBtn = document.createElement("button");
         toggleCompleteBtn.textContent = s.completed ? "Mark Incomplete" : "Mark Complete";
         toggleCompleteBtn.onclick = async () => {
           await fetch(`${API_BASE}/series/${s.id}/toggle_complete`, { method: "PATCH" });
           fetchSeries();
         };
+        actions.appendChild(toggleCompleteBtn);
 
         wrapper.appendChild(btn);
         wrapper.appendChild(label);
         wrapper.appendChild(progress);
-        wrapper.appendChild(toggleCompleteBtn);
+        wrapper.appendChild(actions);
+
         container.appendChild(wrapper);
       });
     }
 
-    async function toggleSeries(seriesId, title) {
-      const container = document.getElementById("volume-list");
-      const editContainer = document.getElementById("edit-total");
-      if (selectedSeriesId === seriesId) {
+    async function toggleSeries(wrapper, s) {
+      document.querySelectorAll(".series-entry").forEach(el => {
+        el.classList.remove("active");
+        const existing = el.querySelector(".details-container");
+        if (existing) existing.remove();
+      });
+
+      if (selectedSeriesId === s.id) {
         selectedSeriesId = null;
         selectedSeriesTitle = "";
-        container.innerHTML = "";
-        editContainer.style.display = "none";
-        editContainer.innerHTML = "";
         return;
       }
 
-      selectedSeriesId = seriesId;
-      selectedSeriesTitle = title;
-      await loadVolumes(seriesId, title);
-      renderUpdateTotalField();
-    }
+      selectedSeriesId = s.id;
+      selectedSeriesTitle = s.title;
+      wrapper.classList.add("active");
 
-    function renderUpdateTotalField() {
-      const editContainer = document.getElementById("edit-total");
-      editContainer.style.display = "block";
+      const details = document.createElement("div");
+      details.className = "details-container";
+
+      const editContainer = document.createElement("div");
       editContainer.innerHTML = `
         <h3>Update Total Volumes for ${selectedSeriesTitle}</h3>
-        <input type="number" id="update-total-${selectedSeriesId}" placeholder="New total" min="1" />
-        <button onclick="updateTotalVolumes(${selectedSeriesId})">Update</button>
+        <input type="number" id="update-total-${s.id}" placeholder="New total" min="1" />
+        <button onclick="updateTotalVolumes(${s.id})">Update</button>
+        <div style="margin-bottom: 1.5rem;"></div>
       `;
+
+      const volumeList = document.createElement("div");
+      volumeList.id = `volume-list-${s.id}`;
+      volumeList.innerHTML = `<h2>${selectedSeriesTitle} - Volumes</h2>`;
+
+      details.appendChild(editContainer);
+      details.appendChild(volumeList);
+      wrapper.appendChild(details);
+
+      loadVolumes(s.id, s.title);
     }
 
     async function updateTotalVolumes(seriesId) {
@@ -196,7 +239,6 @@
 
       if (res.ok) {
         fetchSeries();
-        loadVolumes(seriesId, selectedSeriesTitle);
       } else {
         alert("Failed to update total volumes");
       }
@@ -206,9 +248,7 @@
       const res = await fetch(`${API_BASE}/series/${seriesId}/volumes`);
       const volumes = await res.json();
 
-      const container = document.getElementById("volume-list");
-      container.innerHTML = `<h2>${title} - Volumes</h2>`;
-
+      const container = document.getElementById(`volume-list-${seriesId}`);
       const list = document.createElement("div");
       list.className = "volume-list";
 
@@ -223,19 +263,17 @@
         list.appendChild(item);
       });
 
-      container.appendChild(list);
-
       const addVolForm = document.createElement("form");
       addVolForm.innerHTML = `
         <h3>Add Volume</h3>
-        <input type="number" id="new-vol" placeholder="Volume number" required min="1" />
-        <label><input type="checkbox" id="new-owned" /> Owned</label>
+        <input type="number" id="new-vol-${seriesId}" placeholder="Volume number" required min="1" />
+        <label><input type="checkbox" id="new-owned-${seriesId}" /> Owned</label>
         <button type="submit">Add Volume</button>
       `;
       addVolForm.onsubmit = async (e) => {
         e.preventDefault();
-        const volNum = parseInt(document.getElementById("new-vol").value);
-        const owned = document.getElementById("new-owned").checked;
+        const volNum = parseInt(document.getElementById(`new-vol-${seriesId}`).value);
+        const owned = document.getElementById(`new-owned-${seriesId}`).checked;
 
         await fetch(`${API_BASE}/series/${seriesId}/volumes`, {
           method: "POST",
@@ -246,10 +284,12 @@
         loadVolumes(seriesId, title);
       };
 
+      container.innerHTML = "";
+      container.appendChild(list);
       container.appendChild(addVolForm);
     }
 
-    setFilter(false); // default to showing incomplete series
+    setFilter(false);
   </script>
 </body>
 </html>
