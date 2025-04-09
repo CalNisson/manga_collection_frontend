@@ -26,15 +26,54 @@
     .owned {
       background-color: #c8e6c9;
     }
+    form {
+      margin-top: 1rem;
+    }
+    input, button {
+      margin-right: 0.5rem;
+      padding: 0.5rem;
+    }
   </style>
 </head>
 <body>
   <h1>Manga Volume Tracker</h1>
+
+  <div>
+    <h2>Add New Series</h2>
+    <form id="add-series-form">
+      <input type="text" id="series-title" placeholder="Series title" required />
+      <input type="number" id="series-volumes" placeholder="Total volumes" min="1" />
+      <button type="submit">Add Series</button>
+    </form>
+  </div>
+
   <div id="series-list"></div>
   <div id="volume-list"></div>
 
   <script>
-    const API_BASE = "https://manga-collection-backend-0fqi.onrender.com"; // Replace with your actual Render domain
+    const API_BASE = "https://manga-tracker-api.onrender.com"; // Replace with your actual Render domain
+
+    document.getElementById("add-series-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const title = document.getElementById("series-title").value;
+      const total = document.getElementById("series-volumes").value || null;
+
+      const res = await fetch(`${API_BASE}/series`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ title, total_volumes: total ? parseInt(total) : null }),
+      });
+
+      if (res.ok) {
+        document.getElementById("series-title").value = "";
+        document.getElementById("series-volumes").value = "";
+        fetchSeries();
+      } else {
+        alert("Failed to add series");
+      }
+    });
 
     async function fetchSeries() {
       const res = await fetch(`${API_BASE}/series`);
@@ -75,6 +114,30 @@
       });
 
       container.appendChild(list);
+
+      // Add form to manually add volumes and mark them as owned
+      const addVolForm = document.createElement("form");
+      addVolForm.innerHTML = `
+        <h3>Add Volume</h3>
+        <input type="number" id="new-vol" placeholder="Volume number" required min="1" />
+        <label><input type="checkbox" id="new-owned" /> Owned</label>
+        <button type="submit">Add Volume</button>
+      `;
+      addVolForm.onsubmit = async (e) => {
+        e.preventDefault();
+        const volNum = parseInt(document.getElementById("new-vol").value);
+        const owned = document.getElementById("new-owned").checked;
+
+        await fetch(`${API_BASE}/series/${seriesId}/volumes`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ volume_number: volNum, owned }),
+        });
+
+        loadVolumes(seriesId, title);
+      };
+
+      container.appendChild(addVolForm);
     }
 
     fetchSeries();
