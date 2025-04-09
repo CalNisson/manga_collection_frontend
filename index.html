@@ -39,6 +39,17 @@
     .toggle-section {
       margin-bottom: 1rem;
     }
+    .progress {
+      height: 10px;
+      background-color: #eee;
+      border-radius: 5px;
+      overflow: hidden;
+      margin-top: 5px;
+    }
+    .progress-bar {
+      height: 100%;
+      background-color: #4caf50;
+    }
   </style>
 </head>
 <body>
@@ -116,13 +127,30 @@
         btn.onclick = () => toggleSeries(s.id, s.title);
 
         const label = document.createElement("small");
+        const ownedCount = s.volumes.filter(v => v.owned).length;
         const percent = s.total_volumes
-          ? Math.round((s.volumes.filter(v => v.owned).length / s.total_volumes) * 100)
+          ? Math.round((ownedCount / s.total_volumes) * 100)
           : 0;
         label.textContent = `Total Volumes: ${s.total_volumes ?? 'N/A'} — Owned: ${percent}%`;
 
+        const progress = document.createElement("div");
+        progress.className = "progress";
+        const progressBar = document.createElement("div");
+        progressBar.className = "progress-bar";
+        progressBar.style.width = `${percent}%`;
+        progress.appendChild(progressBar);
+
+        const toggleCompleteBtn = document.createElement("button");
+        toggleCompleteBtn.textContent = s.completed ? "Mark Incomplete" : "Mark Complete";
+        toggleCompleteBtn.onclick = async () => {
+          await fetch(`${API_BASE}/series/${s.id}/toggle_complete`, { method: "PATCH" });
+          fetchSeries();
+        };
+
         wrapper.appendChild(btn);
         wrapper.appendChild(label);
+        wrapper.appendChild(progress);
+        wrapper.appendChild(toggleCompleteBtn);
         container.appendChild(wrapper);
       });
     }
